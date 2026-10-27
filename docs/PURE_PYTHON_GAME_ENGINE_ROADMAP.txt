@@ -1,0 +1,135 @@
+﻿Pure Python Game Engine
+Development Roadmap and Restart Plan
+Prepared September 26, 2026
+
+Purpose
+This document records the agreed plan for returning to the project after an extended break. All included example games have been manually play-tested and currently work as expected. The immediate goal is therefore to preserve that working baseline, add safeguards, and improve the engine deliberately rather than beginning with another large feature or game.
+Current Baseline
+    • The main branch is synchronized with origin/main and has no modified source files.
+    • The latest code work added Breakout, Centipede, and Space Shooter in July 2025.
+    • The project contains 39 Python files and approximately 7,254 lines of Python.
+    • All Python files parse successfully under Python 3.14.7, and the engine package imports successfully.
+    • All example games have been manually tested and behave as expected.
+    • There are currently no automated tests.
+    • Generated __pycache__ directories and .pyc files are present in version control, and no .gitignore exists.
+Guiding Approach
+Do not rewrite working systems merely because alternative code exists. First create a clean, tested foundation. Make small changes, protect behavior with tests, and keep each milestone playable.
+Milestone 1: Establish a Stable Baseline
+1. Repository cleanup — completed September 26, 2026
+    • Add a .gitignore appropriate for Python projects.
+    • Remove tracked __pycache__ directories and .pyc files from version control.
+    • Keep the engine free of runtime dependencies outside the Python standard library.
+    • Add basic project metadata, likely through pyproject.toml.
+    • Create a known-good release tag, such as v0.1.0, after cleanup is complete and verified.
+pyproject.toml declares the package metadata (MIT license, Python 3.10+, zero runtime dependencies) and was verified by building and installing it into a clean virtual environment. The LICENSE file previously contained the full GNU AGPLv3 text while the README claimed MIT; LICENSE now contains the actual MIT text to match. Tagged v0.1.0.
+2. Add headless automated tests — completed September 26, 2026
+Use the standard-library unittest framework initially. Focus on deterministic engine behavior that does not require opening a Tkinter window.
+    • Vector2 and Vector3 arithmetic, normalization, interpolation, and edge cases.
+    • Quaternion construction and rotation behavior.
+    • Local and world transforms, including parent-child relationships.
+    • Component addition, lookup, lifecycle callbacks, and destruction.
+    • Scene object addition, removal, updating, rendering order, and cleanup.
+    • Input pressed, held, released, and profile state transitions.
+    • ECS entity creation, component queries, systems, and removal behavior.
+    • Collision and geometry helpers that already exist.
+174 tests now cover these areas across tests/, run with `python -m unittest discover -s tests`.
+Graphical screenshot tests are intentionally deferred. The first tests should be quick, headless, portable, and useful during every engine change.
+3. Correct contained core inconsistencies — completed September 26, 2026
+    • Pass GameEngine target_fps through to Window instead of always using 60 FPS.
+    • Use time.perf_counter() for monotonic, high-resolution frame timing.
+    • Use and document a bounded variable timestep with delta smoothing and stall protection.
+    • Make the README match the actual timing implementation; it currently claims a fixed timestep while the engine uses a smoothed variable delta.
+    • Replace broad exception handlers with specific exceptions.
+    • Define and test the supported Python version range.
+    • Verify lifecycle ordering during initialization, scene transitions, shutdown, and exceptional exits.
+Milestone 2: Clarify the Engine Architecture — completed September 26, 2026
+The project currently contains two overlapping object models: the Scene/GameObject/component model used by the working games, and a separate World/entity/ECS model. Before expanding both, choose their long-term relationship.
+Option A: Keep GameObject as the primary API (recommended)
+    • Continue using the architecture already proven by the example games.
+    • Treat the ECS as experimental until there is a concrete need for it.
+    • Improve scenes, components, collisions, prefabs, and object lifecycle first.
+    • Optimize only after profiling demonstrates a real bottleneck.
+Option B: Make ECS the engine core
+    • Integrate rendering, transforms, input, and collision as ECS systems.
+    • Port one small game, preferably Breakout, as the reference implementation.
+    • Maintain compatibility while gradually migrating other games.
+Option C: Build a deliberate hybrid
+    • Keep GameObject as a friendly public facade backed internally by ECS entities and components.
+    • Only choose this approach when its added complexity solves a specific problem.
+Decision: Option A accepted. GameObject/components are the primary supported architecture; ECS remains an explicitly imported experimental subsystem.
+Milestone 3: High-Value Engine Capabilities — completed September 26, 2026
+1. Reusable collision system — completed September 26, 2026
+    • Circle, rectangle, and point colliders.
+    • AABB and circle intersection tests.
+    • Collision layers and masks.
+    • Collision enter, stay, and exit callbacks.
+    • Optional spatial hashing for broad-phase detection remains deferred until profiling demonstrates a need.
+The shared collision system is integrated with scenes, documented, and exercised by Breakout as its first complete reference game.
+2. Asset and animation system — completed September 26, 2026
+    • Central image and asset cache.
+    • Sprite-sheet and texture-atlas support.
+    • Reusable animation clips and frame timing.
+    • Consistent asset paths and graceful missing-asset behavior.
+The system now provides cached Tkinter images, lazy sprite-sheet extraction, reusable clips with independent playback, documentation, and a real PNG demo asset.
+3. Scene-management improvements — completed September 26, 2026
+    • Named scene registry.
+    • Pause and resume support.
+    • Scene stacking for menus, dialogs, and overlays.
+    • Deferred object addition and removal during iteration.
+    • Persistent objects across scene changes.
+    • Clearly documented lifecycle callbacks and ordering.
+A SceneManager now provides the registry and stack on top of the existing Scene lifecycle. current_scene and load_scene(scene) still work unmodified, so existing games needed no changes; examples/games/ui_game.py is the reference implementation, including a pushed PauseScene overlay. Documented in docs/SCENE_MANAGEMENT.md.
+4. Development and debugging tools — completed September 26, 2026
+    • Decide whether to complete hot reload or remove the empty placeholder files.
+      Decision: removed. Hot-reloading game code inside a live Tkinter event loop is
+      high-risk for the value it adds to this project's educational scope, so
+      engine/core/hot_reload.py and examples/demos/hot_reload.py were deleted instead
+      of completed.
+    • Add a debug overlay for FPS, frame time, object count, and other useful statistics.
+    • Add collider visualization.
+    • Add runtime logging controls and object inspection.
+    • Add lightweight profiling and slow-frame warnings.
+Every GameEngine now owns a DebugOverlay automatically: F3 toggles a stats overlay
+(FPS, frame time, object/collider counts, scene info), F4 toggles collider outlines,
+F5 cycles the global log level, and F6 logs a snapshot of the current scene's objects.
+Slow frames are logged as warnings automatically, no key required. Documented in
+docs/DEBUGGING.md; examples/demos/debug_tools.py is the reference demo.
+README and API documentation updates — completed September 26, 2026
+Audited every factual claim in README.md against the actual implementation.
+Found and removed one outright false claim: an "Object Pooling" feature bullet
+under Scene System, even though no pooling implementation exists anywhere in
+the codebase (confirmed by search) and the Performance Considerations section
+already correctly says it is deferred. Also found that the Audio System was
+the only major subsystem with no dedicated doc or tests, despite genuinely
+surprising behavior: SoundGenerator computes real waveform samples but never
+plays them as actual audio, approximating distinct sounds with the terminal
+bell's timing/rhythm instead, since no standard-library module can open an
+audio device cross-platform. Documented honestly in the new docs/AUDIO.md,
+with a new tests/test_audio.py (10 tests) covering waveform generation and
+playback. Fixing that test file's dangling daemon threads (play_sound() backs
+its beep pattern with a background thread that can still be sleeping at
+process exit) also surfaced a real, pre-existing shutdown-race fragility in
+SoundGenerator.play_sound() itself, noted here for future attention rather
+than fixed, since it is cosmetic (a "Fatal Python error" message at
+interpreter shutdown) rather than a functional bug.
+Known Items to Revisit
+    • Logging is not exposed through the main engine package API; ECS is intentionally available only through its experimental subpackage.
+    • Renderer post-processing methods for bloom, blur, and retro effects are placeholders.
+    • SoundGenerator.play_sound()'s daemon playback thread can still be sleeping at
+      process exit, racing interpreter shutdown and printing a harmless but noisy
+      "Fatal Python error" message. Not fixed; see docs/AUDIO.md.
+Recommended Work Order
+    1. Repository cleanup and stable release tag. (Completed)
+    2. Automated tests for non-graphical systems. (Completed)
+    3. Timing and lifecycle corrections. (Completed)
+    4. A documented decision about GameObject versus ECS. (Completed)
+    5. Reusable collision system. (Completed)
+    6. Asset and animation improvements. (Completed)
+    7. Scene-management improvements. (Completed)
+    8. Debugging tools and a decision on hot reload. (Completed)
+    9. README and API documentation updates. (Completed)
+    10. Another game only after the improved foundations can be exercised by it.
+First Working Session
+Clean the repository, establish the unittest test structure, and add initial tests for Vector2, Vector3, transforms, and scene/component lifecycle without changing game behavior.
+Long-Term Direction to Decide
+Determine whether the project is primarily an educational game-engine experiment, a polished reusable Python package, or a foundation for creating more games. That decision will guide how much effort goes into architecture, packaging, compatibility, tools, documentation, and editor-like features.
